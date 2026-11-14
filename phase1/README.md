@@ -3,10 +3,7 @@
 A nightly batch pipeline that copies AtliQ's operational (OLTP) data into a separate analytics
 lakehouse, cleans it, and models it into a star schema, so analytics never slows the live shop.
 
-> **This capstone has two phases in two repositories.**
-> Phase 1 (batch lane): this repository.
-> Phase 2 (speed lane: Kafka, Structured Streaming, Airflow): **https://github.com/taskmanagerforme/atliq-speed-lane**
-> (README, write-up, producer, streaming notebook, Airflow DAG and run screenshots).
+> Phase 2 (speed lane: Kafka, Structured Streaming, Airflow) is in [`../phase2`](../phase2).
 
 ```
 Azure SQL (OLTP) ──ADF──> Bronze (raw Parquet/CSV/JSON) ──Databricks──> Silver (clean, MERGE)
