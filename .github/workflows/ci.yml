@@ -1,0 +1,33 @@
+# dbt CI: every pull request (and every push to main) builds and tests the whole dbt project
+# against a throwaway schema atliq.ci, so a broken model or failing test blocks the merge
+# without ever touching production Gold (atliq.gold).
+# Secrets (repo Settings -> Secrets and variables -> Actions):
+#   DATABRICKS_HOST, DATABRICKS_TOKEN, DATABRICKS_HTTP_PATH
+name: dbt CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: dbt-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dbt-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install (locked)
+        run: uv sync --locked
+      - name: dbt build --target ci (models + 37 tests)
+        working-directory: atliq_gold
+        run: uv run dbt build --target ci --profiles-dir .

@@ -1,0 +1,13 @@
+Nightly job atliq_nightly_sync, run 625798039927827 (2026-11-14, run_date = 2026-11-14): SUCCESS
+  silver SUCCESS -> gold_dbt SUCCESS -> audit SUCCESS
+
+atliq.silver.run_audit
+run_date   | finished_at          | silver_orders | silver_order_items | silver_payments | fact_rows | total_gross_revenue
+2026-11-13 | 2026-11-13T12:43:39Z | 10000 | 23155 | 8320 | 22959 | 39392719.00   manual run 1 (no batch: quiet night)
+2026-11-13 | 2026-11-13T12:53:44Z | 10000 | 23155 | 8320 | 22959 | 39392719.00   manual run 2 (idempotent: identical)
+2026-11-13 | 2026-11-13T19:33:37Z | 10000 | 23155 | 8320 | 22959 | 39392719.00   01:00 IST SCHEDULED run (quiet night)
+2026-11-14 | 2026-11-14T05:58:37Z | 10020 | 23203 | 8341 | 23007 | 39556875.00   after ADF batch ingest_date=2026-11-14
+
+The 2026-11-14 ADF batch held ALL 10,020 orders (first run, watermark 1900-01-01) plus 5 orders the
+simulator moved one status step. MERGE inserted only the 20 new orders, updated the 5 changed ones in
+place, and created no duplicates: 10,000 + 20 = 10,020.

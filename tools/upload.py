@@ -4,7 +4,7 @@ Creates schema atliq.raw and volume landing if missing, then uploads every file,
 keeping the folder layout (so ingest_date=... partitions survive).
 Reads DATABRICKS_HOST / DATABRICKS_TOKEN from .env (never printed).
 Run:  uv run tools/upload.py            (all of bronze/)
-      uv run tools/upload.py orders     (just one source folder)
+      uv run tools/upload.py orders customers   (just these source folders)
 """
 import os
 import sys
@@ -30,8 +30,8 @@ if not any(v.name == VOLUME for v in w.volumes.list(catalog_name=CATALOG, schema
     w.volumes.create(catalog_name=CATALOG, schema_name=SCHEMA, name=VOLUME, volume_type=VolumeType.MANAGED)
     print(f"created volume {CATALOG}.{SCHEMA}.{VOLUME}")
 
-base = SRC / sys.argv[1] if len(sys.argv) > 1 else SRC
-files = [p for p in base.rglob("*") if p.is_file()]
+bases = [SRC / a for a in sys.argv[1:]] or [SRC]
+files = [p for b in bases for p in b.rglob("*") if p.is_file()]
 
 
 def put(p: Path) -> None:

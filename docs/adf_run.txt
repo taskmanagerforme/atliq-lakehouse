@@ -1,0 +1,28 @@
+ADF run of pl_nightly_ingest (first run: watermarks at 1900-01-01, so incremental tables copied everything)
+run date 2026-11-14 (UTC), runId 152b697f-c2b5-4d1f-a351-b8646efd9cea, 11:15:48 -> 11:16:57 IST: Succeeded
+
+Activity              Status     Files    Rows
+--------------------  ---------  -------  ------
+set_run_start_at      Succeeded
+lookup_control_table  Succeeded
+foreach_table         Succeeded
+if_incremental (x5)   Succeeded
+copy_incremental      Succeeded  1        10020   orders      (10,000 seed + 20 simulator)
+copy_incremental      Succeeded  1        8341    payments
+copy_incremental      Succeeded  1        23203   order_items
+copy_full             Succeeded  1        60      products
+copy_full             Succeeded  1        1008    customers
+advance_watermark(x5) Succeeded
+foreach_csv           Succeeded
+copy_csv (x2)         Succeeded  1 each           supplier_price_list, marketing_spend
+copy_clickstream      Succeeded  184              raw JSON, not parsed
+
+Bronze in ADLS (lakehouse container)
+bronze/customers/part-00000.parquet                           38985
+bronze/products/part-00000.parquet                            2823
+bronze/orders/ingest_date=2026-11-14/part-00000.parquet       281027
+bronze/order_items/ingest_date=2026-11-14/part-00000.parquet  357323
+bronze/payments/ingest_date=2026-11-14/part-00000.parquet     247686
+bronze/supplier_price_list/supplier_price_list.csv            6588
+bronze/marketing_spend/marketing_spend.csv                    145429
+bronze/clickstream/  (184 files)

@@ -1,0 +1,254 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "AtliQ M2: one metadata-driven ADF pipeline. Lookup etl.control_table -> ForEach -> If load_type -> Copy to ADLS Bronze (Parquet) -> advance watermark. Plus raw copies of the CSVs and clickstream (Binary, no parsing)."
+  },
+  "parameters": {
+    "factoryName": { "type": "string" },
+    "sqlServer": { "type": "string", "metadata": { "description": "server name without .database.windows.net" } },
+    "sqlDb": { "type": "string" },
+    "sqlUser": { "type": "string" },
+    "sqlPassword": { "type": "securestring" },
+    "storageAccount": { "type": "string" },
+    "location": { "type": "string", "defaultValue": "[resourceGroup().location]" }
+  },
+  "variables": {
+    "factoryId": "[resourceId('Microsoft.DataFactory/factories', parameters('factoryName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.DataFactory/factories",
+      "apiVersion": "2018-06-01",
+      "name": "[parameters('factoryName')]",
+      "location": "[parameters('location')]",
+      "identity": { "type": "SystemAssigned" },
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/linkedservices",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/ls_azure_sql')]",
+      "dependsOn": [ "[variables('factoryId')]" ],
+      "properties": {
+        "type": "AzureSqlDatabase",
+        "typeProperties": {
+          "connectionString": "[concat('Data Source=tcp:', parameters('sqlServer'), '.database.windows.net,1433;Initial Catalog=', parameters('sqlDb'), ';User ID=', parameters('sqlUser'), ';Encrypt=True;Connection Timeout=60')]",
+          "password": { "type": "SecureString", "value": "[parameters('sqlPassword')]" }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/linkedservices",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/ls_adls')]",
+      "dependsOn": [ "[variables('factoryId')]" ],
+      "properties": {
+        "type": "AzureBlobFS",
+        "typeProperties": {
+          "url": "[concat('https://', parameters('storageAccount'), '.dfs.core.windows.net/')]",
+          "accountKey": {
+            "type": "SecureString",
+            "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccount')), '2023-01-01').keys[0].value]"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/ds_sql_table')]",
+      "dependsOn": [ "[concat(variables('factoryId'), '/linkedServices/ls_azure_sql')]" ],
+      "properties": {
+        "type": "AzureSqlTable",
+        "linkedServiceName": { "referenceName": "ls_azure_sql", "type": "LinkedServiceReference" },
+        "parameters": { "schema": { "type": "string" }, "table_name": { "type": "string" } },
+        "typeProperties": {
+          "schema": { "value": "@dataset().schema", "type": "Expression" },
+          "table": { "value": "@dataset().table_name", "type": "Expression" }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/ds_bronze_parquet')]",
+      "dependsOn": [ "[concat(variables('factoryId'), '/linkedServices/ls_adls')]" ],
+      "properties": {
+        "type": "Parquet",
+        "linkedServiceName": { "referenceName": "ls_adls", "type": "LinkedServiceReference" },
+        "parameters": { "folder": { "type": "string" } },
+        "typeProperties": {
+          "location": {
+            "type": "AzureBlobFSLocation",
+            "fileSystem": "lakehouse",
+            "folderPath": { "value": "@dataset().folder", "type": "Expression" },
+            "fileName": "part-00000.parquet"
+          },
+          "compressionCodec": "snappy"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/ds_lake_folder')]",
+      "dependsOn": [ "[concat(variables('factoryId'), '/linkedServices/ls_adls')]" ],
+      "properties": {
+        "type": "Binary",
+        "linkedServiceName": { "referenceName": "ls_adls", "type": "LinkedServiceReference" },
+        "parameters": { "folder": { "type": "string" } },
+        "typeProperties": {
+          "location": {
+            "type": "AzureBlobFSLocation",
+            "fileSystem": "lakehouse",
+            "folderPath": { "value": "@dataset().folder", "type": "Expression" }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/pipelines",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/pl_nightly_ingest')]",
+      "dependsOn": [
+        "[concat(variables('factoryId'), '/datasets/ds_sql_table')]",
+        "[concat(variables('factoryId'), '/datasets/ds_bronze_parquet')]",
+        "[concat(variables('factoryId'), '/datasets/ds_lake_folder')]"
+      ],
+      "properties": {
+        "description": "Nightly OLTP -> Bronze. One generic pipeline driven by etl.control_table.",
+        "parameters": {
+          "csv_files": { "type": "array", "defaultValue": [ "supplier_price_list", "marketing_spend" ] }
+        },
+        "variables": { "run_start_at": { "type": "String" } },
+        "activities": [
+          {
+            "name": "set_run_start_at",
+            "description": "Capture the run start ONCE; watermarks advance to this value, never to 'now at the end'.",
+            "type": "SetVariable",
+            "typeProperties": { "variableName": "run_start_at", "value": { "value": "@utcnow()", "type": "Expression" } }
+          },
+          {
+            "name": "lookup_control_table",
+            "type": "Lookup",
+            "dependsOn": [ { "activity": "set_run_start_at", "dependencyConditions": [ "Succeeded" ] } ],
+            "typeProperties": {
+              "source": {
+                "type": "AzureSqlSource",
+                "sqlReaderQuery": "SELECT table_name, source_schema, load_type, watermark_column, CONVERT(varchar(19), last_loaded_at, 120) AS last_loaded_at FROM etl.control_table"
+              },
+              "dataset": { "referenceName": "ds_sql_table", "type": "DatasetReference", "parameters": { "schema": "etl", "table_name": "control_table" } },
+              "firstRowOnly": false
+            }
+          },
+          {
+            "name": "foreach_table",
+            "type": "ForEach",
+            "dependsOn": [ { "activity": "lookup_control_table", "dependencyConditions": [ "Succeeded" ] } ],
+            "typeProperties": {
+              "items": { "value": "@activity('lookup_control_table').output.value", "type": "Expression" },
+              "isSequential": false,
+              "batchCount": 5,
+              "activities": [
+                {
+                  "name": "if_incremental",
+                  "type": "IfCondition",
+                  "typeProperties": {
+                    "expression": { "value": "@equals(item().load_type, 'incremental')", "type": "Expression" },
+                    "ifTrueActivities": [
+                      {
+                        "name": "copy_incremental",
+                        "description": "Only rows changed since the last successful load, into today's ingest_date folder (a same-day retry overwrites it).",
+                        "type": "Copy",
+                        "inputs": [ { "referenceName": "ds_sql_table", "type": "DatasetReference",
+                                      "parameters": { "schema": "@item().source_schema", "table_name": "@item().table_name" } } ],
+                        "outputs": [ { "referenceName": "ds_bronze_parquet", "type": "DatasetReference",
+                                       "parameters": { "folder": "@concat('bronze/', item().table_name, '/ingest_date=', formatDateTime(variables('run_start_at'), 'yyyy-MM-dd'))" } } ],
+                        "typeProperties": {
+                          "source": {
+                            "type": "AzureSqlSource",
+                            "sqlReaderQuery": { "value": "SELECT * FROM [@{item().source_schema}].[@{item().table_name}] WHERE [@{item().watermark_column}] > '@{item().last_loaded_at}'", "type": "Expression" }
+                          },
+                          "sink": { "type": "ParquetSink", "storeSettings": { "type": "AzureBlobFSWriteSettings" }, "formatSettings": { "type": "ParquetWriteSettings" } }
+                        }
+                      }
+                    ],
+                    "ifFalseActivities": [
+                      {
+                        "name": "copy_full",
+                        "description": "Small reference tables: whole table, overwrites bronze/<table>/ (latest snapshot).",
+                        "type": "Copy",
+                        "inputs": [ { "referenceName": "ds_sql_table", "type": "DatasetReference",
+                                      "parameters": { "schema": "@item().source_schema", "table_name": "@item().table_name" } } ],
+                        "outputs": [ { "referenceName": "ds_bronze_parquet", "type": "DatasetReference",
+                                       "parameters": { "folder": "@concat('bronze/', item().table_name)" } } ],
+                        "typeProperties": {
+                          "source": {
+                            "type": "AzureSqlSource",
+                            "sqlReaderQuery": { "value": "SELECT * FROM [@{item().source_schema}].[@{item().table_name}]", "type": "Expression" }
+                          },
+                          "sink": { "type": "ParquetSink", "storeSettings": { "type": "AzureBlobFSWriteSettings" }, "formatSettings": { "type": "ParquetWriteSettings" } }
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "advance_watermark",
+                  "description": "Runs only if this table's copy succeeded.",
+                  "type": "SqlServerStoredProcedure",
+                  "dependsOn": [ { "activity": "if_incremental", "dependencyConditions": [ "Succeeded" ] } ],
+                  "linkedServiceName": { "referenceName": "ls_azure_sql", "type": "LinkedServiceReference" },
+                  "typeProperties": {
+                    "storedProcedureName": "etl.usp_update_watermark",
+                    "storedProcedureParameters": {
+                      "table_name": { "value": { "value": "@item().table_name", "type": "Expression" }, "type": "String" },
+                      "run_start_at": { "value": { "value": "@formatDateTime(variables('run_start_at'), 'yyyy-MM-dd HH:mm:ss')", "type": "Expression" }, "type": "String" }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "foreach_csv",
+            "description": "External CSVs: raw copy (text stays text), full overwrite of bronze/<name>/.",
+            "type": "ForEach",
+            "dependsOn": [ { "activity": "set_run_start_at", "dependencyConditions": [ "Succeeded" ] } ],
+            "typeProperties": {
+              "items": { "value": "@pipeline().parameters.csv_files", "type": "Expression" },
+              "activities": [
+                {
+                  "name": "copy_csv",
+                  "type": "Copy",
+                  "inputs": [ { "referenceName": "ds_lake_folder", "type": "DatasetReference", "parameters": { "folder": "landing/csv" } } ],
+                  "outputs": [ { "referenceName": "ds_lake_folder", "type": "DatasetReference", "parameters": { "folder": "@concat('bronze/', item())" } } ],
+                  "typeProperties": {
+                    "source": { "type": "BinarySource",
+                                "storeSettings": { "type": "AzureBlobFSReadSettings", "recursive": false,
+                                                   "wildcardFileName": { "value": "@concat(item(), '.csv')", "type": "Expression" } } },
+                    "sink": { "type": "BinarySink", "storeSettings": { "type": "AzureBlobFSWriteSettings" } }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "copy_clickstream",
+            "description": "Clickstream JSON copied byte-for-byte (Binary). Malformed lines are Silver's job, never parsed here.",
+            "type": "Copy",
+            "dependsOn": [ { "activity": "set_run_start_at", "dependencyConditions": [ "Succeeded" ] } ],
+            "inputs": [ { "referenceName": "ds_lake_folder", "type": "DatasetReference", "parameters": { "folder": "landing/clickstream" } } ],
+            "outputs": [ { "referenceName": "ds_lake_folder", "type": "DatasetReference", "parameters": { "folder": "bronze/clickstream" } } ],
+            "typeProperties": {
+              "source": { "type": "BinarySource",
+                          "storeSettings": { "type": "AzureBlobFSReadSettings", "recursive": true, "wildcardFileName": "*.json" } },
+              "sink": { "type": "BinarySink", "storeSettings": { "type": "AzureBlobFSWriteSettings", "copyBehavior": "PreserveHierarchy" } }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
