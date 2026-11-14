@@ -1,0 +1,91 @@
+{
+  "email_notifications": {
+    "on_failure": [
+      "<workspace user email>"
+    ]
+  },
+  "environments": [
+    {
+      "environment_key": "dbt_env",
+      "spec": {
+        "dependencies": [
+          "dbt-databricks>=1.10,<2.0"
+        ],
+        "environment_version": "2"
+      }
+    }
+  ],
+  "format": "MULTI_TASK",
+  "max_concurrent_runs": 1,
+  "name": "atliq_nightly_sync",
+  "queue": {
+    "enabled": true
+  },
+  "schedule": {
+    "pause_status": "UNPAUSED",
+    "quartz_cron_expression": "0 0 1 * * ?",
+    "timezone_id": "Asia/Kolkata"
+  },
+  "tasks": [
+    {
+      "disabled": false,
+      "email_notifications": {},
+      "notebook_task": {
+        "base_parameters": {
+          "run_date": "{{job.trigger.time.iso_date}}"
+        },
+        "notebook_path": "/Users/<user>/atliq_capstone/01_bronze_to_silver",
+        "source": "WORKSPACE"
+      },
+      "run_if": "ALL_SUCCESS",
+      "task_key": "silver",
+      "timeout_seconds": 0
+    },
+    {
+      "dbt_task": {
+        "catalog": "atliq",
+        "commands": [
+          "dbt build"
+        ],
+        "project_directory": "/Users/<user>/atliq_capstone/atliq_gold",
+        "schema": "gold",
+        "source": "WORKSPACE",
+        "warehouse_id": "6bcbb88a7907b7d8"
+      },
+      "depends_on": [
+        {
+          "task_key": "silver"
+        }
+      ],
+      "disabled": false,
+      "email_notifications": {},
+      "environment_key": "dbt_env",
+      "run_if": "ALL_SUCCESS",
+      "task_key": "gold_dbt",
+      "timeout_seconds": 0
+    },
+    {
+      "depends_on": [
+        {
+          "task_key": "gold_dbt"
+        }
+      ],
+      "disabled": false,
+      "email_notifications": {},
+      "notebook_task": {
+        "base_parameters": {
+          "run_id": "{{job.run_id}}",
+          "run_date": "{{job.trigger.time.iso_date}}",
+          "start_time": "{{job.start_time.iso_datetime}}"
+        },
+        "notebook_path": "/Users/<user>/atliq_capstone/03_run_audit",
+        "source": "WORKSPACE"
+      },
+      "run_if": "ALL_SUCCESS",
+      "task_key": "audit",
+      "timeout_seconds": 0
+    }
+  ],
+  "timeout_seconds": 0,
+  "webhook_notifications": {}
+}

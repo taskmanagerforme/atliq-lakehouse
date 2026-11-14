@@ -1,0 +1,17 @@
+name: atliq_gold
+version: "1.0.0"
+config-version: 2
+profile: atliq_gold
+
+model-paths: ["models"]
+test-paths: ["tests"]
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  atliq_gold:
+    staging:
+      +materialized: view
+    gold:
+      +materialized: table
+# Note: on Databricks Free Edition there is no ADLS external location, so Gold is written as
+# UC managed tables in atliq.<target.schema> (gold in prod, ci in CI) instead of +location_root.

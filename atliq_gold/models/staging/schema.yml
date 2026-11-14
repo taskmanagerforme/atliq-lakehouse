@@ -1,0 +1,47 @@
+models:
+  - name: stg_customers
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: city
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: ['Bengaluru', 'Mumbai', 'Delhi', 'Hyderabad', 'Chennai', 'Pune', 'Kolkata', 'Ahmedabad', 'Jaipur', 'Surat']}
+  - name: stg_products
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+      - name: category
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: ['Electronics', 'Home & Kitchen', 'Fashion', 'Books', 'Beauty', 'Sports']}
+  - name: stg_orders
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+  - name: stg_order_items
+    columns:
+      - name: order_item_id
+        data_tests: [unique, not_null]
+  - name: stg_payments
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: method
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: ['UPI', 'Credit Card', 'Debit Card', 'Net Banking', 'Wallet', 'COD']}
+  - name: stg_supplier_price_list
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+  - name: stg_marketing_spend
+    columns:
+      - name: channel
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: ['Meta Ads', 'Google Ads', 'Email', 'SEO', 'Influencer']}
