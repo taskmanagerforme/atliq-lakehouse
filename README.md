@@ -13,15 +13,15 @@ Azure SQL (OLTP) ──ADF──> Bronze (raw Parquet/CSV/JSON) ──Databricks
 
 ## Status
 
-| Milestone | State | Evidence |
+| Milestone | Result | Evidence |
 |---|---|---|
-| M1 OLTP in Azure SQL + simulator | ✅ 7 scripts loaded, counts 1008 / 60 / 10000 / 23155 / 8320 | `docs/azure_sql_counts.png` |
-| M2 ADF metadata-driven pipeline | ✅ one generic pipeline, 5 tables + 2 CSVs + 184 clickstream files, watermarks advanced | `adf/arm_template.json`, `docs/adf_run.txt` |
-| M3 Bronze → Silver (cleaning, dq_log, MERGE, quarantine) | ✅ all 28 §7.7 checkpoints match | `docs/dq_report.md` |
-| M4 Gold with dbt (5 tables, 7 views, 37 tests) | ✅ PASS=49 WARN=0 ERROR=0 | `atliq_gold/` |
-| M5 Nightly job, schedule, failure email, idempotency | ✅ 01:00 IST schedule fired on its own; two runs identical; first ADF batch merged with no duplicates | `jobs/nightly_job.json`, `docs/nightly_job.jpg`, `docs/idempotency_proof.jpg`, `docs/incremental_run.txt` |
-| CI (GitHub Actions dbt build) | ✅ `dbt build --target ci` into throwaway schema `atliq.ci` | `.github/workflows/ci.yml` |
-| M6 Fabric dashboard | ✅ Lakehouse `atliq_gold` + Direct Lake semantic model + report: revenue trend, top categories, top cities, new vs returning, funnel, date/category slicers | `docs/fabric_dashboard.jpg`, `fabric/model.tmdl` |
+| M1 OLTP in Azure SQL + simulator | 7 scripts loaded, counts 1008 / 60 / 10000 / 23155 / 8320 | `docs/azure_sql_counts.png` |
+| M2 ADF metadata-driven pipeline | One generic pipeline, 5 tables + 2 CSVs + 184 clickstream files, watermarks advanced | `adf/arm_template.json`, `docs/adf_run.txt` |
+| M3 Bronze → Silver (cleaning, dq_log, MERGE, quarantine) | All 28 §7.7 checkpoints match | `docs/dq_report.md` |
+| M4 Gold with dbt (5 tables, 7 views, 37 tests) | PASS=49 WARN=0 ERROR=0 | `atliq_gold/` |
+| M5 Nightly job, schedule, failure email, idempotency | 01:00 IST schedule fired on its own; two runs identical; first ADF batch merged with no duplicates | `jobs/nightly_job.json`, `docs/nightly_job.jpg`, `docs/idempotency_proof.jpg`, `docs/incremental_run.txt` |
+| M6 Fabric dashboard | Lakehouse `atliq_gold` + Direct Lake semantic model + report: revenue trend, top categories, top cities, new vs returning, funnel, date/category slicers | `docs/fabric_dashboard.jpg`, `fabric/model.tmdl` |
+| M7 CI/CD (GitHub Actions dbt build) | `dbt build --target ci` into throwaway schema `atliq.ci` | `.github/workflows/ci.yml` |
 
 ### Why the platform is split (hybrid)
 
