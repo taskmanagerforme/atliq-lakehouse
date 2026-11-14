@@ -36,6 +36,18 @@ Azure SQL (OLTP) ──ADF──> Bronze (raw Parquet/CSV/JSON) ──Databricks
 - The very first Bronze load (before Azure was available) was built from the seed files by
   `tools/seed_to_bronze.py` as batch `ingest_date=2026-08-31`; the §7.7 checkpoints were matched on it.
 
+### What is automated and what is not
+
+| Step | How it runs |
+|---|---|
+| Databricks nightly job (Silver, dbt Gold, run audit) | Scheduled at 01:00 IST with a failure email; the schedule fired on its own (`docs/nightly_job.jpg`) |
+| ADF `pl_nightly_ingest` | Run on demand by `tools/adf_up.sh`; no ADF schedule trigger was added, to keep Azure cost minimal during the build |
+| ADF output to Databricks (`tools/adf_pull.sh`) | Manual: Free Edition cannot read ADLS, so this copy is the one step a person runs |
+
+On a full Azure Databricks workspace the chain would be fully automatic: an ADF schedule trigger at about 00:30 IST
+(or an ADF "Databricks notebook" activity after the copies), with the notebook reading
+`abfss://lakehouse@<account>.dfs.core.windows.net/bronze` directly, so `adf_pull.sh` would not be needed.
+
 ## The nightly sync, end to end
 
 ```
