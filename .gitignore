@@ -1,0 +1,10 @@
+# secrets: commit .env.example, never .env
+.env
+.last_order_id
+# Airflow: generated config holds keys; logs are noise
+airflow.cfg
+logs/
+__pycache__/
+.venv/
+# real Databricks config notebook (holds Kafka secret)
+databricks/local/
