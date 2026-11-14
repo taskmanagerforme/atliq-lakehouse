@@ -1,0 +1,6 @@
+[project]
+name = "capstone-phase2"
+version = "0.1.0"
+description = "AtliQ Commerce Phase 2 — real-time lane (Kafka producer side)"
+requires-python = ">=3.11"
+dependencies = ["confluent-kafka>=2.3,<3.0", "python-dotenv>=1.0,<2.0"]
