@@ -21,7 +21,7 @@ Azure SQL (OLTP) ──ADF──> Bronze (raw Parquet/CSV/JSON) ──Databricks
 | M4 Gold with dbt (5 tables, 7 views, 37 tests) | ✅ PASS=49 WARN=0 ERROR=0 | `atliq_gold/` |
 | M5 Nightly job, schedule, failure email, idempotency | ✅ 01:00 IST schedule fired on its own; two runs identical; first ADF batch merged with no duplicates | `jobs/nightly_job.json`, `docs/nightly_job.jpg`, `docs/idempotency_proof.jpg`, `docs/incremental_run.txt` |
 | CI (GitHub Actions dbt build) | ✅ `dbt build --target ci` into throwaway schema `atliq.ci` | `.github/workflows/ci.yml` |
-| M6 Fabric dashboard | ❌ not done: the Fabric trial needs a work/school account; mine is personal (Gmail) | — |
+| M6 Fabric dashboard | ✅ Lakehouse `atliq_gold` + Direct Lake semantic model + report: revenue trend, top categories, top cities, new vs returning, funnel, date/category slicers | `docs/fabric_dashboard.jpg`, `fabric/model.tmdl` |
 
 ### Why the platform is split (hybrid)
 
@@ -60,6 +60,22 @@ The 2026-11-14 batch contained all 10,020 orders (first run, watermark 1900-01-0
 exactly the 20 new orders, and the 5 orders the simulator moved forward were updated in place.
 (The revenue here includes Cancelled orders; the §7.7 figure 32,424,661.00 excludes them.)
 
+## Fabric dashboard (M6)
+
+![AtliQ Sales Dashboard](docs/fabric_dashboard.jpg)
+
+- **Workspace** `atliq-capstone` on a Fabric **F2** capacity in `rg-atliq-capstone` (the free Fabric trial was refused
+  for this tenant; the capacity is paused when not in use).
+- **Data:** Free Edition cannot expose Gold on ADLS for a OneLake shortcut, so `tools/export_gold.py` exports the five
+  Gold tables to Parquet and they are loaded into the Lakehouse `atliq_gold` (same rows as `atliq.gold`).
+- **Model:** Direct Lake semantic model `atliq_sales_model`; relationships and measures are in
+  [`fabric/model.tmdl`](fabric/model.tmdl) (applied through the TMDL view): fact_sales to dim_customer, dim_product
+  and dim_date; fact_web_sessions to dim_date, so the date slicer also filters the funnel.
+- **Revenue definition (stated on the dashboard):** Gross = non-cancelled orders; Returned shown separately;
+  Net = Gross − Returned. Gross 32,588,817 = the §7.7 32,424,661 plus exactly the 2026-11-14 ADF batch.
+- **Funnel:** 23,193 sessions → 13,309 product views → 7,391 add to cart → 4,442 checkouts → 3,446 purchases,
+  conversion 14.9% (matches §7.7).
+
 ## Repo layout
 
 | Path | What |
@@ -75,6 +91,7 @@ exactly the 20 new orders, and the 5 orders the simulator moved forward were upd
 | `adf/arm_template.json` | The whole ADF factory: linked services, parameterised datasets, `pl_nightly_ingest` |
 | `tools/adf_up.sh`, `tools/adf_pull.sh` | Deploy + run the pipeline; carry its Bronze output into Databricks |
 | `tools/run_job.py` | Trigger the nightly job and print `run_audit` |
+| `tools/export_gold.py`, `fabric/model.tmdl` | Gold → Parquet for the Fabric Lakehouse; semantic-model relationships + DAX measures |
 | `.github/workflows/ci.yml` | dbt CI on every pull request |
 | `databricks/01_bronze_to_silver.py` | Cleaning rules, `dq_log`, MERGE into Silver, quiet-night guard |
 | `databricks/02_checkpoints.py` | The 28 §7.7 checkpoint queries |
@@ -127,7 +144,7 @@ watermarks, quiet nights, and idempotency.
 
 ## Cost and clean-up
 
-Everything on Azure lives in `rg-atliq-capstone` (SQL Basic ≈ $5/month, ADLS and ADF pennies),
+Everything on Azure lives in `rg-atliq-capstone` (SQL Basic ≈ $5/month, ADLS and ADF pennies, Fabric F2 ≈ $0.36/hour only while resumed),
 with a ₹1,500 budget alert. Deleting that one resource group removes it all.
 
 ## Secrets

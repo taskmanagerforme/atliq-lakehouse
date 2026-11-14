@@ -1,0 +1,59 @@
+createOrReplace
+
+	relationship sales_customer
+		fromColumn: fact_sales.customer_id
+		toColumn: dim_customer.customer_id
+
+	relationship sales_product
+		fromColumn: fact_sales.product_id
+		toColumn: dim_product.product_id
+
+	relationship sales_date
+		fromColumn: fact_sales.order_date
+		toColumn: dim_date.date_day
+
+	relationship sessions_date
+		fromColumn: fact_web_sessions.session_date
+		toColumn: dim_date.date_day
+
+	ref table fact_sales
+
+		measure 'Gross Revenue' = CALCULATE ( SUM ( fact_sales[gross_revenue] ), fact_sales[status] <> "Cancelled" )
+			formatString: #,0
+
+		measure 'Returned Revenue' = CALCULATE ( SUM ( fact_sales[gross_revenue] ), fact_sales[status] = "Returned" )
+			formatString: #,0
+
+		measure 'Net Revenue' = [Gross Revenue] - [Returned Revenue]
+			formatString: #,0
+
+		measure Customers = DISTINCTCOUNT ( fact_sales[customer_id] )
+
+		measure 'New Customers' = ```
+				VAR m_start = MIN ( dim_date[date_day] )
+				VAR m_end = MAX ( dim_date[date_day] )
+				RETURN
+				    CALCULATE (
+				        [Customers],
+				        FILTER ( dim_customer,
+				                 dim_customer[first_order_date] >= m_start
+				                     && dim_customer[first_order_date] <= m_end )
+				    )
+				```
+
+		measure 'Returning Customers' = [Customers] - [New Customers]
+
+	ref table fact_web_sessions
+
+		measure Sessions = COUNTROWS ( fact_web_sessions )
+
+		measure 'Product Views' = SUM ( fact_web_sessions[reached_product_view] )
+
+		measure 'Add to Cart' = SUM ( fact_web_sessions[reached_add_to_cart] )
+
+		measure Checkouts = SUM ( fact_web_sessions[reached_checkout] )
+
+		measure Purchases = SUM ( fact_web_sessions[reached_purchase] )
+
+		measure 'Conversion Rate' = DIVIDE ( [Purchases], [Sessions] )
+			formatString: 0.0%
